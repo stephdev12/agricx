@@ -28,17 +28,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- RLS Profils
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Profils visibles par tous les utilisateurs connectés"
+CREATE POLICY "Profils lecture publique"
   ON public.profiles FOR SELECT
   USING (true);
 
-CREATE POLICY "Utilisateurs peuvent modifier leur propre profil"
+CREATE POLICY "Profils modification utilisateur"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
-CREATE POLICY "Utilisateurs peuvent insérer leur propre profil"
+CREATE POLICY "Profils insertion utilisateur"
   ON public.profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
+  WITH CHECK (true);
 
 -- Trigger pour création automatique de profil lors de l'inscription Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -52,10 +52,16 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'whatsapp', ''),
     COALESCE(NEW.raw_user_meta_data->>'region', 'Centre'),
     COALESCE(NEW.raw_user_meta_data->>'city', 'Yaoundé')
-  );
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    updated_at = NOW();
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created

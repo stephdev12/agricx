@@ -12,15 +12,21 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
   try {
     const { data, error } = await supabase
       .from('suppliers')
-      .select('*, products:supplier_products(*)')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      console.warn('Note Supabase suppliers:', error.message);
       return DEMO_SUPPLIERS;
     }
 
-    return data as Supplier[];
-  } catch {
+    if (data && data.length > 0) {
+      return data as Supplier[];
+    }
+
+    return DEMO_SUPPLIERS;
+  } catch (err) {
+    console.warn('Erreur réseau suppliers:', err);
     return DEMO_SUPPLIERS;
   }
 }

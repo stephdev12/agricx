@@ -24,15 +24,24 @@ export async function fetchTechnicalArticles(category?: string): Promise<Contrib
 
     const { data, error } = await query;
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      console.warn('Note Supabase technical_articles:', error.message);
       if (category && category !== 'Tous') {
         return DEMO_ARTICLES.filter((a) => a.category === category);
       }
       return DEMO_ARTICLES;
     }
 
-    return data as ContributorArticle[];
-  } catch {
+    if (data && data.length > 0) {
+      return data as ContributorArticle[];
+    }
+
+    if (category && category !== 'Tous') {
+      return DEMO_ARTICLES.filter((a) => a.category === category);
+    }
+    return DEMO_ARTICLES;
+  } catch (err) {
+    console.warn('Erreur fiches:', err);
     return DEMO_ARTICLES;
   }
 }

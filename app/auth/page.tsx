@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
-import { Leaf, ArrowRight } from 'lucide-react';
+import { Leaf, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -28,16 +28,18 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     const supabase = getSupabaseBrowserClient();
 
     if (!supabase) {
-      // Offline Demo Mode
+      // Offline fallback
       setTimeout(() => {
         setLoading(false);
         router.push('/app');
@@ -47,19 +49,65 @@ export default function AuthPage() {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
+        if (password.length < 6) {
+          setErrorMsg('Le mot de passe doit contenir au moins 6 caractères.');
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
           password,
-          options: { data: { full_name: fullName } },
+          options: {
+            data: {
+              full_name: fullName.trim() || 'Agri-Producteur',
+            },
+          },
         });
-        if (error) throw error;
+
+        if (error) {
+          throw error;
+        }
+
+        // Si confirmation d'email requise par le projet Supabase
+        if (data.user && !data.session) {
+          setSuccessMsg(
+            'Compte créé avec succès ! Si la confirmation par email est activée sur votre projet Supabase, vérifiez votre boîte de réception pour valider votre compte.'
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (data.session) {
+          router.push('/app');
+          return;
+        }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (data.session) {
+          router.push('/app');
+          return;
+        }
       }
-      router.push('/app');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Une erreur est survenue lors de la connexion.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Une erreur est survenue lors de la connexion.';
+      if (msg.includes('Invalid login credentials')) {
+        setErrorMsg('Email ou mot de passe incorrect.');
+      } else if (msg.includes('User already registered')) {
+        setErrorMsg('Cet email est déjà enregistré. Veuillez vous connecter.');
+      } else if (msg.includes('Email not confirmed')) {
+        setErrorMsg('Veuillez confirmer votre email avant de vous connecter (ou désactivez "Confirm Email" dans le dashboard Supabase > Authentication).');
+      } else {
+        setErrorMsg(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -91,10 +139,12 @@ export default function AuthPage() {
           </Link>
         </div>
 
-        {/* Card using user's exact structure */}
+        {/* Card */}
         <Card className="w-full max-w-sm border-border bg-card/90 shadow-xl backdrop-blur-xl">
           <CardHeader>
-            <CardTitle className="text-foreground">{isSignUp ? 'Créer un compte' : 'Connexion à votre compte'}</CardTitle>
+            <CardTitle className="text-foreground">
+              {isSignUp ? 'Créer un compte' : 'Connexion à votre compte'}
+            </CardTitle>
             <CardDescription className="text-muted-foreground">
               {isSignUp
                 ? 'Renseignez vos coordonnées pour démarrer'
@@ -104,7 +154,11 @@ export default function AuthPage() {
               <Button
                 variant="link"
                 className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 p-0 h-auto cursor-pointer font-medium"
-                onClick={() => setIsSignUp(!isSignUp)}
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                }}
               >
                 {isSignUp ? 'Connexion' : 'S\'inscrire'}
               </Button>
@@ -113,8 +167,15 @@ export default function AuthPage() {
 
           <CardContent>
             {errorMsg && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-xs border border-red-500/20">
+              <div className="mb-4 p-3 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-xs border border-red-500/20 leading-relaxed">
                 {errorMsg}
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs border border-emerald-500/20 flex items-start gap-2 leading-relaxed">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{successMsg}</span>
               </div>
             )}
 
@@ -169,6 +230,7 @@ export default function AuthPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    minLength={6}
                   />
                 </div>
               </div>
