@@ -1,13 +1,8 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { Supplier, SupplierRequest } from '@/lib/supabase/types';
-import { DEMO_SUPPLIERS } from '@/lib/data/demoData';
 
 export async function fetchSuppliers(): Promise<Supplier[]> {
   const supabase = getSupabaseBrowserClient();
-
-  if (!supabase) {
-    return DEMO_SUPPLIERS;
-  }
 
   try {
     const { data, error } = await supabase
@@ -16,25 +11,19 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('Note Supabase suppliers:', error.message);
-      return DEMO_SUPPLIERS;
+      console.warn('Erreur Supabase suppliers:', error.message);
+      return [];
     }
 
-    if (data !== null) {
-      // Si la table existe et renvoie des données (même vide si le producteur n'a pas encore ajouté)
-      return data.length > 0 ? (data as Supplier[]) : DEMO_SUPPLIERS;
-    }
-
-    return DEMO_SUPPLIERS;
+    return (data as Supplier[]) || [];
   } catch (err) {
     console.warn('Erreur réseau suppliers:', err);
-    return DEMO_SUPPLIERS;
+    return [];
   }
 }
 
 export async function createDirectSupplier(supplier: Omit<Supplier, 'id' | 'created_at'>): Promise<Supplier | null> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return null;
 
   try {
     const { data, error } = await supabase
@@ -64,7 +53,6 @@ export async function createDirectSupplier(supplier: Omit<Supplier, 'id' | 'crea
 
 export async function deleteSupplier(supplierId: string): Promise<boolean> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return false;
 
   try {
     const { error } = await supabase.from('suppliers').delete().eq('id', supplierId);
@@ -80,9 +68,6 @@ export async function submitSupplierRequest(
   request: Omit<SupplierRequest, 'id' | 'status' | 'created_at' | 'updated_at'>
 ): Promise<{ success: boolean; data?: SupplierRequest; error?: string }> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return { success: false, error: 'Connexion à la base de données non disponible.' };
-  }
 
   try {
     const { data, error } = await supabase
@@ -108,7 +93,6 @@ export async function submitSupplierRequest(
 
 export async function fetchPendingSupplierRequests(): Promise<SupplierRequest[]> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return [];
 
   try {
     const { data, error } = await supabase
@@ -127,7 +111,6 @@ export async function approveSupplierRequest(
   request: SupplierRequest
 ): Promise<{ success: boolean; supplier?: Supplier; error?: string }> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return { success: false, error: 'Base non connectée' };
 
   try {
     // 1. Mettre à jour le statut de la demande
@@ -177,14 +160,13 @@ export async function rejectSupplierRequest(
   adminNotes?: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return { success: false, error: 'Base non connectée' };
 
   try {
     const { error } = await supabase
       .from('supplier_requests')
       .update({
         status: 'rejected',
-        admin_notes: adminNotes || 'Dossier incomplet ou non vérifiable',
+        admin_notes: adminNotes || 'Dossier incomplet ou non conforme',
         updated_at: new Date().toISOString(),
       })
       .eq('id', requestId);

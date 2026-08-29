@@ -1,16 +1,8 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { ContributorArticle } from '@/lib/supabase/types';
-import { DEMO_ARTICLES } from '@/lib/data/demoData';
 
 export async function fetchTechnicalArticles(category?: string): Promise<ContributorArticle[]> {
   const supabase = getSupabaseBrowserClient();
-
-  if (!supabase) {
-    if (category && category !== 'Tous') {
-      return DEMO_ARTICLES.filter((a) => a.category === category);
-    }
-    return DEMO_ARTICLES;
-  }
 
   try {
     let query = supabase
@@ -25,25 +17,14 @@ export async function fetchTechnicalArticles(category?: string): Promise<Contrib
     const { data, error } = await query;
 
     if (error) {
-      console.warn('Note Supabase technical_articles:', error.message);
-      if (category && category !== 'Tous') {
-        return DEMO_ARTICLES.filter((a) => a.category === category);
-      }
-      return DEMO_ARTICLES;
+      console.warn('Erreur Supabase technical_articles:', error.message);
+      return [];
     }
 
-    if (data !== null) {
-      return data.length > 0
-        ? (data as ContributorArticle[])
-        : category && category !== 'Tous'
-        ? DEMO_ARTICLES.filter((a) => a.category === category)
-        : DEMO_ARTICLES;
-    }
-
-    return DEMO_ARTICLES;
+    return (data as ContributorArticle[]) || [];
   } catch (err) {
-    console.warn('Erreur fiches:', err);
-    return DEMO_ARTICLES;
+    console.warn('Erreur réseau fiches:', err);
+    return [];
   }
 }
 
@@ -51,7 +32,6 @@ export async function createTechnicalArticle(
   article: Omit<ContributorArticle, 'id' | 'created_at'>
 ): Promise<{ success: boolean; data?: ContributorArticle; error?: string }> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return { success: false, error: 'Supabase non connecté' };
 
   try {
     const { data, error } = await supabase
@@ -69,7 +49,6 @@ export async function createTechnicalArticle(
 
 export async function deleteTechnicalArticle(articleId: string): Promise<boolean> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return false;
 
   try {
     const { error } = await supabase.from('technical_articles').delete().eq('id', articleId);
