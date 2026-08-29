@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Search, MapPin, MessageCircle } from 'lucide-react';
+import { Search, MapPin, MessageCircle, Store, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -66,14 +67,23 @@ export default function AnnuairePage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="space-y-1"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-          Fournisseurs
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Intrants, géniteurs et matériel agricole au Cameroun
-        </p>
+        <div className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+            Fournisseurs
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Intrants, géniteurs et matériel agricole au Cameroun
+          </p>
+        </div>
+
+        <Button variant="emerald" size="sm" asChild className="shrink-0 text-xs gap-1.5">
+          <Link href="/app/fournisseur-formulaire">
+            <Store className="w-3.5 h-3.5" />
+            <span>Enregistrer ma boutique</span>
+          </Link>
+        </Button>
       </motion.div>
 
       {/* Search & Filters */}

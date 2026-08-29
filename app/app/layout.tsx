@@ -10,9 +10,11 @@ import {
   Bot,
   User,
   Leaf,
+  ShieldCheck,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { MenuBar, type MenuItem } from '@/components/ui/glow-menu';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 const GLOW_NAV_ITEMS: MenuItem[] = [
   {
@@ -68,6 +70,7 @@ const GLOW_NAV_ITEMS: MenuItem[] = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isAdmin } = useAuth();
 
   // Find active item label based on pathname
   const getActiveLabel = () => {
@@ -105,8 +108,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </Link>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Admin shortcut button if admin or dev */}
+          {isAdmin && (
+            <Link
+              href="/app/admin"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors text-xs font-semibold"
+              title="Tableau de bord Admin"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+          )}
+
           <ThemeToggle />
+          
           <Link
             href="/app/profil"
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border/60 bg-card/60 hover:bg-muted transition-colors text-xs font-medium text-foreground"

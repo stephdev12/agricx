@@ -32,16 +32,49 @@ export async function fetchTechnicalArticles(category?: string): Promise<Contrib
       return DEMO_ARTICLES;
     }
 
-    if (data && data.length > 0) {
-      return data as ContributorArticle[];
+    if (data !== null) {
+      return data.length > 0
+        ? (data as ContributorArticle[])
+        : category && category !== 'Tous'
+        ? DEMO_ARTICLES.filter((a) => a.category === category)
+        : DEMO_ARTICLES;
     }
 
-    if (category && category !== 'Tous') {
-      return DEMO_ARTICLES.filter((a) => a.category === category);
-    }
     return DEMO_ARTICLES;
   } catch (err) {
     console.warn('Erreur fiches:', err);
     return DEMO_ARTICLES;
+  }
+}
+
+export async function createTechnicalArticle(
+  article: Omit<ContributorArticle, 'id' | 'created_at'>
+): Promise<{ success: boolean; data?: ContributorArticle; error?: string }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { success: false, error: 'Supabase non connecté' };
+
+  try {
+    const { data, error } = await supabase
+      .from('technical_articles')
+      .insert([article])
+      .select()
+      .single();
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: data as ContributorArticle };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Erreur lors de la publication' };
+  }
+}
+
+export async function deleteTechnicalArticle(articleId: string): Promise<boolean> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('technical_articles').delete().eq('id', articleId);
+    return !error;
+  } catch {
+    return false;
   }
 }

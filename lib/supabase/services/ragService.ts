@@ -1,5 +1,5 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-import { RagSearchResult } from '@/lib/supabase/types';
+import { RagKnowledgeDocument, RagKnowledgeChunk, RagSearchResult } from '@/lib/supabase/types';
 
 export interface IngestChunkInput {
   content: string;
@@ -7,6 +7,52 @@ export interface IngestChunkInput {
   embedding?: number[];
   chunk_index?: number;
   metadata?: Record<string, unknown>;
+}
+
+export async function fetchRagDocuments(): Promise<RagKnowledgeDocument[]> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('rag_knowledge_documents')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+    return data as RagKnowledgeDocument[];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchRagChunks(documentId?: string): Promise<RagKnowledgeChunk[]> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return [];
+
+  try {
+    let query = supabase.from('rag_knowledge_chunks').select('*').order('created_at', { ascending: false });
+    if (documentId) {
+      query = query.eq('document_id', documentId);
+    }
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data as RagKnowledgeChunk[];
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteRagDocument(documentId: string): Promise<boolean> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('rag_knowledge_documents').delete().eq('id', documentId);
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 export async function queryRagContext(

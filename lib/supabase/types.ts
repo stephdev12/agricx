@@ -9,6 +9,7 @@ export interface Profile {
   experience_level: 'Débutant' | 'Intermédiaire' | 'Expert';
   bio: string;
   avatar_url?: string | null;
+  role?: 'user' | 'supplier' | 'admin';
   created_at?: string;
   updated_at?: string;
 }
@@ -49,6 +50,26 @@ export interface Supplier {
   distance_km?: number | null;
   is_demo?: boolean;
   created_at?: string;
+}
+
+export interface SupplierRequest {
+  id: string;
+  user_id?: string | null;
+  business_name: string;
+  owner_name: string;
+  category: string;
+  phone: string;
+  whatsapp: string;
+  region: string;
+  city: string;
+  address?: string;
+  cni_number: string;
+  cni_photo_url?: string | null;
+  business_proof_url?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface FinancialItem {

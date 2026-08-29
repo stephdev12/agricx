@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   experience_level TEXT DEFAULT 'Débutant' CHECK (experience_level IN ('Débutant', 'Intermédiaire', 'Expert')),
   bio TEXT,
   avatar_url TEXT,
+  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'supplier', 'admin')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -116,8 +117,30 @@ CREATE TABLE IF NOT EXISTS public.supplier_products (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Demandes d'enregistrement de boutique / Fournisseur (avec CNI & justificatifs)
+CREATE TABLE IF NOT EXISTS public.supplier_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  business_name TEXT NOT NULL,
+  owner_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  whatsapp TEXT NOT NULL,
+  region TEXT NOT NULL,
+  city TEXT NOT NULL,
+  address TEXT,
+  cni_number TEXT NOT NULL,
+  cni_photo_url TEXT,
+  business_proof_url TEXT, -- Registre de commerce, déclaration fiscale ou photo boutique
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  admin_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.supplier_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.supplier_requests ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Suppliers lecture publique" ON public.suppliers;
 CREATE POLICY "Suppliers lecture publique" ON public.suppliers FOR SELECT USING (true);
@@ -130,6 +153,9 @@ CREATE POLICY "Products lecture publique" ON public.supplier_products FOR SELECT
 
 DROP POLICY IF EXISTS "Products modification authentifié" ON public.supplier_products;
 CREATE POLICY "Products modification authentifié" ON public.supplier_products FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Supplier requests accès" ON public.supplier_requests;
+CREATE POLICY "Supplier requests accès" ON public.supplier_requests FOR ALL USING (true);
 
 
 -- ==============================================================================
