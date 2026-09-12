@@ -55,6 +55,45 @@ export async function deleteRagDocument(documentId: string): Promise<boolean> {
   }
 }
 
+function inferDomainCategory(query: string): string | null {
+  const lower = query.toLowerCase();
+  if (/poulet|poussin|volaille|poule|pondeuse|coq|coccidi|gumboro|newcastle|couvoir|avicole|chair|liti[eè]re/i.test(lower)) {
+    return 'Aviculture';
+  }
+  if (/poisson|silure|clarias|tilapia|alevin|piscic|étang|etang|bac hors-sol/i.test(lower)) {
+    return 'Pisciculture';
+  }
+  if (/porc|porcelet|truie|verrat|porcherie|peste porcine/i.test(lower)) {
+    return 'Porciculture';
+  }
+  if (/cacao|café|cafe|palmier|hévéa|hevea/i.test(lower)) {
+    return 'Cultures Pérennes';
+  }
+  if (/tomate|piment|oignon|carotte|chou|maraîch|maraich/i.test(lower)) {
+    return 'Maraîchage';
+  }
+  if (/maïs|mais|manioc|soja|arachide|plantain|haricot/i.test(lower)) {
+    return 'Grandes Cultures';
+  }
+  return null;
+}
+
+function expandKeywordVariants(words: string[]): string[] {
+  const expanded = new Set<string>(words);
+  for (const w of words) {
+    if (w === 'elevage') expanded.add('élevage');
+    if (w === 'élevage') expanded.add('elevage');
+    if (w === 'poulet') expanded.add('poulets');
+    if (w === 'poulets') expanded.add('poulet');
+    if (w === 'poussin') expanded.add('poussins');
+    if (w === 'poisson') expanded.add('poissons');
+    if (w === 'porc') expanded.add('porcs');
+    if (w === 'mais') expanded.add('maïs');
+    if (w === 'maïs') expanded.add('mais');
+  }
+  return Array.from(expanded);
+}
+
 export async function queryRagContext(
   query: string,
   category?: string,
@@ -67,13 +106,15 @@ export async function queryRagContext(
   }
 
   try {
+    const detectedDomain = category || inferDomainCategory(query);
+
     // If vector embedding is provided, use pgvector cosine search RPC
     if (queryEmbedding && queryEmbedding.length > 0) {
       const { data, error } = await supabase.rpc('match_rag_chunks', {
         query_embedding: queryEmbedding,
         match_threshold: 0.55,
         match_count: 4,
-        filter_category: category || null,
+        filter_category: detectedDomain || null,
       });
 
       if (!error && data && data.length > 0) {
@@ -81,53 +122,86 @@ export async function queryRagContext(
       }
     }
 
-    // Recherche intelligente par mots-clés sémantiques sur les chunks RAG
+    // Stop words and generic conversational words that must NOT be used to filter database chunks
     const stopWords = new Set([
       'pour', 'dans', 'avec', 'quel', 'quels', 'quelle', 'quelles', 'comment',
       'faire', 'mon', 'mes', 'leur', 'leurs', 'plus', 'cette', 'sont', 'peut',
-      'est', 'une', 'des', 'les', 'par', 'sur', 'qui', 'que', 'quoi', 'donne', 'moi'
+      'est', 'une', 'des', 'les', 'par', 'sur', 'qui', 'que', 'quoi', 'donne', 'moi',
+      'lancer', 'debuter', 'commencer', 'vouloir', 'pouvoir', 'avoir', 'etre',
+      'projet', 'guide', 'conseil', 'conseils', 'etape', 'etapes', 'astuce',
+      'astuces', 'bien', 'mieux', 'tout', 'tous', 'toute', 'toutes', 'prix',
+      'cout', 'combien', 'recommandation', 'bonne', 'bons', 'bonnes', 'faut'
     ]);
 
-    const keywords = query
+    const cleanQuery = query
       .toLowerCase()
-      .replace(/[^\w\sàâäéèêëîïôöùûüç]/gi, ' ')
+      .replace(/l'levage/g, 'elevage')
+      .replace(/l'élevage/g, 'elevage')
+      .replace(/[^\w\sàâäéèêëîïôöùûüç]/gi, ' ');
+
+    const rawKeywords = cleanQuery
       .split(/\s+/)
       .map((w) => w.trim())
       .filter((w) => w.length >= 4 && !stopWords.has(w));
+
+    const keywords = expandKeywordVariants(rawKeywords);
 
     let queryBuilder = supabase
       .from('rag_knowledge_chunks')
       .select('id, document_id, content, category, metadata');
 
-    if (category) {
+    if (detectedDomain === 'Aviculture') {
+      queryBuilder = queryBuilder.in('category', ['Aviculture', 'Santé Animale']);
+    } else if (detectedDomain === 'Pisciculture') {
+      queryBuilder = queryBuilder.in('category', ['Pisciculture', 'Santé Animale']);
+    } else if (detectedDomain === 'Porciculture') {
+      queryBuilder = queryBuilder.in('category', ['Porciculture', 'Santé Animale']);
+    } else if (detectedDomain === 'Maraîchage') {
+      queryBuilder = queryBuilder.in('category', ['Maraîchage', 'Fiches Techniques', 'Calendrier Agricole']);
+    } else if (detectedDomain === 'Grandes Cultures') {
+      queryBuilder = queryBuilder.in('category', ['Grandes Cultures', 'Fiches Techniques', 'Calendrier Agricole']);
+    } else if (category) {
       queryBuilder = queryBuilder.eq('category', category);
     }
 
     if (keywords.length > 0) {
-      // Filtrer les chunks contenant au moins l'un des mots-clés clés (jusqu'à 5 mots-clés)
       const orFilter = keywords
-        .slice(0, 5)
+        .slice(0, 6)
         .map((k) => `content.ilike.%${k}%`)
         .join(',');
       queryBuilder = queryBuilder.or(orFilter);
     }
 
-    const { data: chunks, error: chunksError } = await queryBuilder.limit(25);
+    const { data: chunks, error: chunksError } = await queryBuilder.limit(35);
 
     if (!chunksError && chunks && chunks.length > 0) {
-      const lowerQ = query.toLowerCase();
       const scored = chunks.map((c) => {
         const lowerC = c.content.toLowerCase();
         let matchScore = 0.5;
+
+        // Boost if chunk category matches detected domain
+        if (detectedDomain && c.category === detectedDomain) {
+          matchScore += 0.25;
+        }
+
+        // Boost per keyword match
         keywords.forEach((w) => {
-          if (lowerC.includes(w)) matchScore += 0.15;
+          if (lowerC.includes(w.toLowerCase())) matchScore += 0.15;
         });
+
+        // Penalize cross-domain terms (e.g. soil/irrigation/seeds in animal breeding queries)
+        if (['Aviculture', 'Pisciculture', 'Porciculture'].includes(detectedDomain || '')) {
+          if (lowerC.includes('irrigation') || lowerC.includes('npk') || lowerC.includes('semis') || lowerC.includes('sol arable') || lowerC.includes('maraîch')) {
+            matchScore -= 0.5;
+          }
+        }
+
         return {
           id: c.id,
           document_id: c.document_id,
           content: c.content,
           category: c.category,
-          similarity: Math.min(matchScore, 0.98),
+          similarity: Math.min(Math.max(matchScore, 0.1), 0.98),
           metadata: c.metadata,
         };
       });
@@ -198,6 +272,13 @@ function getFallbackRagChunks(query: string, category?: string): RagSearchResult
 
   const FALLBACK_CORPUS: RagSearchResult[] = [
     {
+      id: 'fb-aviculture-guide',
+      category: 'Aviculture',
+      similarity: 0.96,
+      content:
+        "Guide MINEPIA — Élevage du Poulet de Chair au Cameroun :\n1. Bâtiment & Litière : Orienté Est-Ouest pour l'aération naturelle. Litière en copeaux de bois blancs secs (5 à 7 cm). Densité : 10 à 12 sujets/m².\n2. Poussinière & Souches : Poussins d'un jour de souches certifiées (Cobb 500 ou Ross 308). Chauffage à 32-35°C la première semaine.\n3. Alimentation & Eau : Provende démarrage (21-22% PB) puis croissance (19% PB). Eau propre et fraîche à volonté avec vitamines antistress.\n4. Calendrier sanitaire : Vaccin Gumboro à J7 et J14, rappel Newcastle à J21, anti-coccidien (Amprolium) à J10-J14. Abattage à 40-45 jours (2.0 à 2.5 kg).",
+    },
+    {
       id: 'fb-pisciculture-1',
       category: 'Pisciculture',
       similarity: 0.92,
@@ -231,14 +312,17 @@ function getFallbackRagChunks(query: string, category?: string): RagSearchResult
     return FALLBACK_CORPUS.filter((c) => c.category.toLowerCase() === category.toLowerCase());
   }
 
-  if (lower.includes('silure') || lower.includes('poisson') || lower.includes('alevin') || lower.includes('eau')) {
-    return [FALLBACK_CORPUS[0]];
+  if (lower.includes('poulet') || lower.includes('poussin') || lower.includes('volaille') || lower.includes('avic') || lower.includes('elevage') || lower.includes('chair')) {
+    return [FALLBACK_CORPUS[0], FALLBACK_CORPUS[2]];
   }
-  if (lower.includes('poulet') || lower.includes('poussin') || lower.includes('fiente') || lower.includes('coccidiose')) {
+  if (lower.includes('silure') || lower.includes('poisson') || lower.includes('alevin') || lower.includes('eau')) {
     return [FALLBACK_CORPUS[1]];
   }
-  if (lower.includes('provende') || lower.includes('formule') || lower.includes('soja') || lower.includes('aliment')) {
+  if (lower.includes('coccidiose') || lower.includes('fiente')) {
     return [FALLBACK_CORPUS[2]];
+  }
+  if (lower.includes('provende') || lower.includes('formule') || lower.includes('soja') || lower.includes('aliment')) {
+    return [FALLBACK_CORPUS[3]];
   }
 
   return FALLBACK_CORPUS.slice(0, 2);

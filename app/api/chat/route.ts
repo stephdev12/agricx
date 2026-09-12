@@ -9,18 +9,18 @@ function getSmartFallback(userPrompt: string, ragContextChunks: any[]): string {
   const lowerPrompt = userPrompt.toLowerCase();
   if (ragContextChunks && ragContextChunks.length > 0) {
     const topChunk = ragContextChunks[0];
-    return `Analyse basée sur la base de connaissances Agricx (Pertinence : ${(topChunk.similarity * 100).toFixed(0)}%) :\n\n${topChunk.content}\n\n• Conseil pratique : Veillez au respect des posologies locales et appliquez les mesures préventives sans délai.`;
+    return `Analyse technique Agricx (Pertinence : ${(topChunk.similarity * 100).toFixed(0)}%) :\n\n${topChunk.content}\n\n• Recommandation : Respectez rigoureusement ces normes techniques et biosécuritaires pour maximiser la rentabilité de votre exploitation.`;
+  }
+  if (lowerPrompt.includes('poulet') || lowerPrompt.includes('volaille') || lowerPrompt.includes('poussin') || lowerPrompt.includes('chair') || lowerPrompt.includes('coccidiose') || lowerPrompt.includes('elevage')) {
+    return "Guide Pratique Avicole — Poulets de chair au Cameroun :\n\n1. Bâtiment & Litière : Bâtiment aéré orienté Est-Ouest, désinfection complète, litière en copeaux de bois secs (5 à 7 cm), densité de 10 à 12 sujets/m² en zone chaude.\n2. Poussinière & Souches : Poussins d'un jour certifiés (Cobb 500 ou Ross 308), chauffage à 32-35°C la 1ère semaine.\n3. Alimentation & Eau : Provende démarrage (21% PB), abreuvoirs propres avec eau fraîche et vitamines antistress.\n4. Calendrier Sanitaire : Vaccins Newcastle et Gumboro (J7, J14), traitement préventif anti-coccidien (Amprolium à J10-J14). Abattage à 40-45 jours pour un poids de 2.0 à 2.5 kg.\n\nBonne réussite dans votre projet d'élevage avicole !";
   }
   if (lowerPrompt.includes('silure') || lowerPrompt.includes('poisson') || lowerPrompt.includes('bac')) {
-    return "Protocole Piscicole — Silure Clarias :\n\n• Diagnostic : Stress asphyxique ou montée de nitrites.\n• Conduite à tenir :\n1. Renouveler 50% de l'eau avec de l'eau propre non chlorée.\n2. Arrêter le nourrissage pendant 24h.\n3. Salage au gros sel non iodé à 1.5 kg/m³ d'eau.\n4. Oxygéner par cascade ou bulleur.";
-  }
-  if (lowerPrompt.includes('poulet') || lowerPrompt.includes('coccidiose') || lowerPrompt.includes('fiente')) {
-    return "Protocole Avicole — Poulets de chair :\n\n• Diagnostic : Suspicion de Coccidiose.\n• Conduite à tenir :\n1. Isoler les sujets abattus.\n2. Administrer Amprolium 20% ou Toltrazuril dans l'eau de boisson pendant 3 à 5 jours.\n3. Remplacer la litière souillée par des copeaux secs désinfectés.\n4. Administrer des vitamines A, D3, E, K post-traitement.";
+    return "Protocole Piscicole — Silure Clarias :\n\n• Densité : 50 à 70 alevins/m³ en bac hors-sol avec renouvellement régulier d'eau.\n• Alimentation : Granulés flottants à 40-45% PB. Calibrage bimensuel indispensable contre le cannibalisme.\n• Conduite d'urgence (stress ou nitrites) : Renouveler 50% de l'eau, salage au gros sel non iodé à 1.5 kg/m³ et aération mécanique.";
   }
   if (lowerPrompt.includes('mais') || lowerPrompt.includes('maïs') || lowerPrompt.includes('fertilisation')) {
     return "Recommandation Agricx — Culture du Maïs au Cameroun :\n\n• Semences recommandées : Variétés améliorées IRAD (ex: CMS 8704 ou CHC 201).\n• Fertilisation : 200 kg/ha de NPK 15-15-15 au semis, puis 100 kg/ha d'Urée au 30e jour.\n• Densité : 50 000 à 62 500 plants/ha (80 cm x 40 cm, 2 grains par poquet).";
   }
-  return "Recommandation Agricx :\n\nPour optimiser votre exploitation agropastorale, veillez à la qualité de vos semences et intrants, et respectez les calendriers de traitement locaux. N'hésitez pas à consulter un expert partenaire via l'annuaire.";
+  return "Recommandation Agricx :\n\nPour optimiser votre exploitation agropastorale, veillez à la qualité de vos intrants, respectez les calendriers zootechniques et prophylactiques locaux, et suivez les conseils de nos spécialistes partenaires.";
 }
 
 export async function POST(req: Request) {
@@ -40,14 +40,20 @@ export async function POST(req: Request) {
 
     // 2. Préparation du contexte système Agricx
     let systemContext =
-      "Tu es Agricx IA, l'assistant agropastoral expert du Cameroun (cultures vivrières, de rente, élevage, santé animale et gestion financière en FCFA). Réponds toujours en français de manière complète, détaillée et bien structurée (diagnostic, étapes concrètes, posologies et recommandations préventives adaptées au climat et aux réalités du Cameroun).";
+      "Tu es Agricx IA, l'assistant agropastoral expert du Cameroun. Réponds en français avec précision, clarté et professionnalisme.";
+
+    systemContext += `\n\nCONSIGNES IMPORTANTES :
+1. Respecte STRICTEMENT la filière concernée par la question. Si la question concerne l'élevage (poulets, porcs, poissons), il est FORMELLEMENT INTERDIT de mentionner des sols, légumes, cultures, engrais NPK, semences végétales ou irrigation.
+2. Structure ta réponse en points concrets numérotés (1 à 2 phrases courtes par point).
+3. Conclus TOUJOURS par une brève phrase d'encouragement avant d'arrêter ta génération.
+4. Reste concis et va directement à l'essentiel pour que la réponse soit complète sans être interrompue.`;
 
     if (ragContextChunks && ragContextChunks.length > 0) {
       const topContext = ragContextChunks
         .slice(0, 2)
         .map((c) => c.content)
         .join('\n---\n');
-      systemContext += `\n\nDonnées vérifiées issues de la base Agricx :\n${topContext}`;
+      systemContext += `\n\nDonnées techniques Agricx vérifiées (à reformuler fidèlement selon la filière) :\n${topContext}`;
     }
 
     // 3. Appel au modèle finetuné sur Ollama en mode STREAMING
@@ -72,10 +78,10 @@ export async function POST(req: Request) {
           stream: true,
           keep_alive: '24h',
           options: {
-            temperature: 0.3,
+            temperature: 0.15,
             top_p: 0.9,
-            num_ctx: 2048,
-            num_predict: 450, // Permet des réponses complètes et détaillées sans risque de timeout
+            num_ctx: 1024,
+            num_predict: 220, // Calibré pour terminer confortablement en ~35-45s, bien avant la limite de 60s de Vercel
           },
         }),
       });
