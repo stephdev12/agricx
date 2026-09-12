@@ -56,22 +56,39 @@ export async function POST(req: Request) {
       systemContext += `\n\nDonnées techniques Agricx vérifiées (à reformuler fidèlement selon la filière) :\n${topContext}`;
     }
 
-    // 3. Appel au modèle finetuné sur Ollama en mode STREAMING
+    // 3. Appel au modèle sur Ollama en mode STREAMING
     const OLLAMA_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'agricx';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma2:2b';
+
+    const isElevageQuery = /poulet|poussin|volaille|poule|chair|elevage|élevage|porc|poisson|silure/i.test(userPrompt);
 
     const formattedMessages = [
       { role: 'system', content: systemContext },
-      ...messages.slice(-4).map((m) => ({
-        role: m.sender === 'user' || m.role === 'user' ? 'user' : 'assistant',
-        content: m.text || m.content || '',
-      })),
+      ...messages.slice(-4).map((m) => {
+        let content = m.text || m.content || '';
+        // Éviter que les hallucinations passées stockées dans l'historique du navigateur ne polluent le prompt
+        if ((m.sender !== 'user' && m.role !== 'user') && isElevageQuery) {
+          content = content
+            .replace(/terrain fertile[^.\n]*/gi, '')
+            .replace(/engrais[^.\n]*/gi, '')
+            .replace(/semence[^.\n]*/gi, '')
+            .replace(/culture de [^.\n]*/gi, '')
+            .replace(/irrigation[^.\n]*/gi, '');
+        }
+        return {
+          role: m.sender === 'user' || m.role === 'user' ? 'user' : 'assistant',
+          content,
+        };
+      }),
     ];
 
     try {
       const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Connection': 'close',
+        },
         body: JSON.stringify({
           model: OLLAMA_MODEL,
           messages: formattedMessages,
@@ -81,7 +98,7 @@ export async function POST(req: Request) {
             temperature: 0.15,
             top_p: 0.9,
             num_ctx: 1024,
-            num_predict: 220, // Calibré pour terminer confortablement en ~35-45s, bien avant la limite de 60s de Vercel
+            num_predict: 280, // Permet de générer les 5 points complets et la phrase de conclusion
           },
         }),
       });
