@@ -49,6 +49,32 @@ export default function AIChatPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
+  // Charger la conversation sauvegardée au montage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('agricx_chat_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur chargement historique local:', e);
+    }
+  }, []);
+
+  // Sauvegarder automatiquement l'historique lors de chaque mise à jour
+  useEffect(() => {
+    try {
+      if (messages.length > 1) {
+        localStorage.setItem('agricx_chat_history', JSON.stringify(messages));
+      }
+    } catch (e) {
+      console.warn('Erreur sauvegarde historique local:', e);
+    }
+  }, [messages]);
+
   const scrollToBottom = () => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -197,6 +223,11 @@ export default function AIChatPage() {
   };
 
   const resetChat = () => {
+    try {
+      localStorage.removeItem('agricx_chat_history');
+    } catch (e) {
+      console.warn('Erreur suppression historique local:', e);
+    }
     setMessages([
       {
         id: 'welcome',
