@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { queryRagContext } from '@/lib/supabase/services/ragService';
 
+// Vercel Serverless maximum execution duration (jusqu'à 60s)
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -16,16 +20,17 @@ export async function POST(req: Request) {
     // 1. Récupération du contexte RAG depuis Supabase
     const ragContextChunks = await queryRagContext(userPrompt, category);
 
-    // 2. Préparation du contexte système Agricx avec injection RAG
+    // 2. Préparation du contexte système Agricx avec injection RAG compacte
     let systemContext =
-      "Tu es Agricx IA, l'assistant agropastoral expert du Cameroun (cultures vivrières, rente, élevage, santé animale et gestion financière en FCFA). Réponds toujours en français clair, précis, bienveillant et structuré.";
+      "Tu es Agricx IA, l'assistant agropastoral expert du Cameroun (cultures vivrières, rente, élevage, santé animale et gestion financière en FCFA). Réponds toujours en français clair, précis et structuré.";
 
     if (ragContextChunks && ragContextChunks.length > 0) {
+      // Garder les 2 données clés pour préserver la vitesse d'inférence CPU
       const topContext = ragContextChunks
-        .slice(0, 3)
+        .slice(0, 2)
         .map((c) => c.content)
         .join('\n---\n');
-      systemContext += `\n\nVoici des données officielles et techniques vérifiées issues de la base de connaissances Agricx à utiliser si pertinent :\n${topContext}`;
+      systemContext += `\n\nDonnées vérifiées Agricx :\n${topContext}`;
     }
 
     // 3. Appel au modèle finetuné sur Ollama (AWS EC2)
@@ -38,7 +43,7 @@ export async function POST(req: Request) {
       // Formatage de l'historique pour Ollama
       const formattedMessages = [
         { role: 'system', content: systemContext },
-        ...messages.map((m) => ({
+        ...messages.slice(-4).map((m) => ({
           role: m.sender === 'user' || m.role === 'user' ? 'user' : 'assistant',
           content: m.text || m.content || '',
         })),
@@ -51,12 +56,15 @@ export async function POST(req: Request) {
           model: OLLAMA_MODEL,
           messages: formattedMessages,
           stream: false,
+          keep_alive: '24h', // Maintient le modèle chaud en RAM
           options: {
             temperature: 0.2,
             top_p: 0.9,
+            num_ctx: 2048, // Évite la surconsommation de bande passante RAM sur CPU
+            num_predict: 250, // Réponse concise et rapide en ~15-20s
           },
         }),
-        signal: AbortSignal.timeout(20000), // Timeout de 20s
+        signal: AbortSignal.timeout(50000), // Timeout étendu à 50s
       });
 
       if (ollamaRes.ok) {
