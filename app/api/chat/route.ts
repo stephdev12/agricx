@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     // 2. Préparation du contexte système Agricx avec injection RAG compacte
     let systemContext =
-      "Tu es Agricx IA, l'assistant agropastoral expert du Cameroun (cultures vivrières, rente, élevage, santé animale et gestion financière en FCFA). Réponds toujours en français clair, précis et structuré.";
+      "Tu es Agricx IA, l'assistant agropastoral expert du Cameroun (cultures vivrières, rente, élevage, santé animale et gestion financière en FCFA). Réponds toujours en français de manière concise, directe et structurée (maximum 3 à 4 points clés).";
 
     if (ragContextChunks && ragContextChunks.length > 0) {
       // Garder les 2 données clés pour préserver la vitesse d'inférence CPU
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
             temperature: 0.2,
             top_p: 0.9,
             num_ctx: 2048, // Évite la surconsommation de bande passante RAM sur CPU
-            num_predict: 250, // Réponse concise et rapide en ~15-20s
+            num_predict: 140, // Réponse concise et rapide en ~30s sur CPU
           },
         }),
         signal: AbortSignal.timeout(50000), // Timeout étendu à 50s
