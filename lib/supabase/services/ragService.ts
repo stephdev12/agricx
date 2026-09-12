@@ -81,25 +81,45 @@ export async function queryRagContext(
       }
     }
 
-    // Fallback to text matching on RAG knowledge chunks
+    // Recherche intelligente par mots-clés sémantiques sur les chunks RAG
+    const stopWords = new Set([
+      'pour', 'dans', 'avec', 'quel', 'quels', 'quelle', 'quelles', 'comment',
+      'faire', 'mon', 'mes', 'leur', 'leurs', 'plus', 'cette', 'sont', 'peut',
+      'est', 'une', 'des', 'les', 'par', 'sur', 'qui', 'que', 'quoi', 'donne', 'moi'
+    ]);
+
+    const keywords = query
+      .toLowerCase()
+      .replace(/[^\w\sàâäéèêëîïôöùûüç]/gi, ' ')
+      .split(/\s+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length >= 4 && !stopWords.has(w));
+
     let queryBuilder = supabase
       .from('rag_knowledge_chunks')
-      .select('id, document_id, content, category, metadata')
-      .limit(4);
+      .select('id, document_id, content, category, metadata');
 
     if (category) {
       queryBuilder = queryBuilder.eq('category', category);
     }
 
-    const { data: chunks, error: chunksError } = await queryBuilder;
+    if (keywords.length > 0) {
+      // Filtrer les chunks contenant au moins l'un des mots-clés clés (jusqu'à 5 mots-clés)
+      const orFilter = keywords
+        .slice(0, 5)
+        .map((k) => `content.ilike.%${k}%`)
+        .join(',');
+      queryBuilder = queryBuilder.or(orFilter);
+    }
+
+    const { data: chunks, error: chunksError } = await queryBuilder.limit(25);
 
     if (!chunksError && chunks && chunks.length > 0) {
       const lowerQ = query.toLowerCase();
       const scored = chunks.map((c) => {
         const lowerC = c.content.toLowerCase();
         let matchScore = 0.5;
-        const words = lowerQ.split(/\s+/).filter((w) => w.length > 3);
-        words.forEach((w) => {
+        keywords.forEach((w) => {
           if (lowerC.includes(w)) matchScore += 0.15;
         });
         return {
@@ -107,7 +127,7 @@ export async function queryRagContext(
           document_id: c.document_id,
           content: c.content,
           category: c.category,
-          similarity: Math.min(matchScore, 0.95),
+          similarity: Math.min(matchScore, 0.98),
           metadata: c.metadata,
         };
       });
