@@ -81,27 +81,16 @@ RÈGLES ABSOLUES (toute violation = réponse rejetée) :
 - N'invente RIEN. Base ta réponse EXCLUSIVEMENT sur les données techniques fournies ci-dessous.`;
   }
 
-  prompt += `
+  prompt += '\n\nFORMAT : 4 points numérotés très courts. Conclus par 1 phrase d encouragement.';
 
-FORMAT DE RÉPONSE :
-- 5 à 6 points numérotés, chacun de 1 à 2 phrases courtes.
-- Termine par une phrase d'encouragement.
-- Ne dépasse pas 250 mots.`;
-
-  // ─── Injection du contexte RAG ───
+  // ─── Injection du contexte RAG (tronqué pour vitesse) ───
   if (ragContextChunks && ragContextChunks.length > 0) {
     const contextParts = ragContextChunks
-      .slice(0, 3)
-      .map((c, i) => `[Source ${i + 1}] ${c.content}`)
-      .join('\n\n');
+      .slice(0, 2)
+      .map((c) => c.content.substring(0, 350))
+      .join('\n---\n');
 
-    prompt += `
-
-══════ DONNÉES TECHNIQUES VÉRIFIÉES ══════
-${contextParts}
-══════════════════════════════════════════
-
-INSTRUCTION FINALE : Reformule FIDÈLEMENT ces données techniques ci-dessus pour répondre à la question de l'utilisateur. Ne rajoute AUCUNE information qui ne figure pas dans les données ci-dessus.`;
+    prompt += `\n\nDONNÉES VÉRIFIÉES (reformule fidèlement, n'invente rien) :\n${contextParts}`;
   }
 
   return prompt;
@@ -149,23 +138,27 @@ export async function POST(req: Request) {
     ];
 
     try {
+      const abortCtrl = new AbortController();
+      const timeoutId = setTimeout(() => abortCtrl.abort(), 52000); // 52s safety margin
+
       const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Connection': 'close',
         },
+        signal: abortCtrl.signal,
         body: JSON.stringify({
           model: OLLAMA_MODEL,
           messages: formattedMessages,
           stream: true,
           keep_alive: '24h',
           options: {
-            temperature: 0,        // Déterministe : même question = même réponse
+            temperature: 0,
             top_p: 0.9,
-            num_ctx: 2048,          // Plus de place pour le contexte RAG
-            num_predict: 400,       // Assez pour 5-6 points complets + conclusion
-            repeat_penalty: 1.15,   // Évite les boucles et répétitions
+            num_ctx: 1024,
+            num_predict: 180,       // 4 points concis ≈ 50s sur CPU EC2 (< 52s abort)
+            repeat_penalty: 1.15,
           },
         }),
       });
@@ -226,6 +219,7 @@ export async function POST(req: Request) {
           },
         });
 
+        clearTimeout(timeoutId);
         return new Response(stream, {
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',
@@ -235,8 +229,13 @@ export async function POST(req: Request) {
           },
         });
       }
-    } catch (ollamaErr) {
-      console.warn('Ollama inaccessible, utilisation du fallback RAG:', ollamaErr);
+    } catch (ollamaErr: any) {
+      clearTimeout(timeoutId);
+      if (ollamaErr?.name === 'AbortError') {
+        console.warn('Ollama fetch avorté après 52s (timeout Vercel)');
+      } else {
+        console.warn('Ollama inaccessible, utilisation du fallback RAG:', ollamaErr);
+      }
     }
 
     // 4. Fallback si Ollama est indisponible
