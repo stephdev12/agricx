@@ -115,17 +115,43 @@ export default function AIChatPage() {
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const botMsg: ChatMessageItem = {
-          id: (Date.now() + 1).toString(),
-          sender: 'bot',
-          text: data.text,
-          timestamp: data.timestamp || new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-        };
-        setMessages((prev) => [...prev, botMsg]);
-        setIsTyping(false);
-        return;
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = '';
+        let botMsgCreated = false;
+        const botMsgId = (Date.now() + 1).toString();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          if (!chunk) continue;
+
+          accumulatedText += chunk;
+
+          if (!botMsgCreated) {
+            botMsgCreated = true;
+            setIsTyping(false);
+            const botMsg: ChatMessageItem = {
+              id: botMsgId,
+              sender: 'bot',
+              text: accumulatedText,
+              timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            };
+            setMessages((prev) => [...prev, botMsg]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === botMsgId ? { ...m, text: accumulatedText } : m))
+            );
+          }
+        }
+
+        if (accumulatedText.trim().length > 0) {
+          setIsTyping(false);
+          return;
+        }
       }
     } catch (err) {
       console.warn('Fallback local RAG suite à erreur réseau:', err);
